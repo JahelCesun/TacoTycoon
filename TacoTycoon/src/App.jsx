@@ -115,16 +115,22 @@ export default function App() {
   
   // ETAPA 7: El TPS total ahora lee desde la nueva estructura de estado anidada.
   const totalTps = useMemo(() => {
-    const tpsAsada = (() => {
-      // ETAPA 7 EXTRA: Se añade una comprobación para no calcular el TPS de un taco bloqueado.
-      if (!gameState.asada.isUnlocked) return 0;
-      const ayudantes = gameState.asada.ayudantes;
-      const tpsBase = (ayudantes.find(a => a.id === 'asada-ayudante-1')?.nivel || 0) * 1;
-      const multiplicadorNivel = ayudantes.find(a => a.id === 'asada-ayudante-2')?.nivel || 0;
-      return tpsBase * Math.pow(2, multiplicadorNivel);
-    })();
-    return tpsAsada;
-  }, [gameState]);
+  let total = 0;
+
+  Object.values(gameState).forEach(taco => {
+    if (!taco.isUnlocked) return;
+
+    const ayudantes = taco.ayudantes;
+
+    const baseTps = (ayudantes.find(a => a.id.includes('-ayudante-1'))?.nivel || 0) * 1;
+    const multiplicador = ayudantes.find(a => a.id.includes('-ayudante-2'))?.nivel || 0;
+
+    const tacoTps = baseTps * Math.pow(2, multiplicador);
+    total += tacoTps;
+  });
+
+  return total;
+}, [gameState]);
 
   // ETAPA 7: Se añade un cálculo para el total de tacos vendidos de todos los tipos.
   const totalTacos = useMemo(() => {
@@ -134,22 +140,37 @@ export default function App() {
 
   // --- BUCLE DEL JUEGO ---
   useEffect(() => {
-    if (totalTps === 0) return;
-    const intervalId = setInterval(() => {
-      const gananciaPorSegundo = totalTps * calculateGananciaPorClick('asada');
-      // ETAPA 7: La actualización de estado ahora debe modificar el objeto anidado correctamente.
-      setGameState(prev => ({
-        ...prev,
-        asada: {
-          ...prev.asada,
-          tacosVendidos: prev.asada.tacosVendidos + (totalTps / 10)
-        }
-      }));
-      setDinero(prevDinero => prevDinero + (gananciaPorSegundo / 10));
-    }, 100);
-    return () => clearInterval(intervalId);
-    // ETAPA 7: `gameState` se convierte en una dependencia para que el bucle se actualice si algo cambia.
-  }, [totalTps, gameState]);
+  if (totalTps === 0) return;
+
+  const intervalId = setInterval(() => {
+    let totalGanancia = 0;
+    let nuevoEstado = { ...gameState };
+
+    Object.keys(gameState).forEach(tacoId => {
+      const taco = gameState[tacoId];
+      if (!taco.isUnlocked) return;
+
+      const ayudantes = taco.ayudantes;
+      const baseTps = (ayudantes.find(a => a.id.includes('-ayudante-1'))?.nivel || 0);
+      const multiplicador = ayudantes.find(a => a.id.includes('-ayudante-2'))?.nivel || 0;
+      const tps = baseTps * Math.pow(2, multiplicador);
+
+      const ganancia = calculateGananciaPorClick(tacoId) * (tps / 10);
+      totalGanancia += ganancia;
+
+      nuevoEstado[tacoId] = {
+        ...taco,
+        tacosVendidos: taco.tacosVendidos + (tps / 10),
+      };
+    });
+
+    setGameState(nuevoEstado);
+    setDinero(prev => prev + totalGanancia);
+  }, 100);
+
+  return () => clearInterval(intervalId);
+}, [totalTps, gameState]);
+
 
   // --- MANEJADORES DE EVENTOS ---
   
